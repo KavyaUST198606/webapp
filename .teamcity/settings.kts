@@ -1,4 +1,5 @@
 import jetbrains.buildServer.configs.kotlin.*
+import jetbrains.buildServer.configs.kotlin.vcs.GitVcsRoot
 
 version = "2025.03"
 
@@ -20,7 +21,7 @@ object DotNetFrameworkWebAppVS2019 : Template({
         text("vstest.path", """C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\Common7\IDE\CommonExtensions\Microsoft\TestWindow\vstest.console.exe""", label = "VSTest console path", allowEmpty = false)
         text("test.dll.pattern", "*Tests.dll", label = "Test assembly pattern", allowEmpty = false)
         text("artifact.dir", "artifacts", label = "Artifact folder", allowEmpty = false)
-        text("package.source", "src\\%application.id%", label = "Web project folder to package", allowEmpty = false)
+        text("package.source", "src\\SimpleWebApp", label = "Web project folder to package", allowEmpty = false)
         text("deploy.package.name", "%application.id%-%build.number%.zip", label = "Package file name", allowEmpty = false)
         text("sonar.host.url", "", label = "SonarQube URL", allowEmpty = false)
         password("sonar.token", "", label = "SonarQube token")
@@ -140,6 +141,88 @@ object DotNetFrameworkWebAppVS2019 : Template({
     """.trimIndent()
 })
 
+// Source repo that holds MyDotNetFrameworkApp.sln, the SimpleWebApp project and its tests.
+object DotNetWebAppGitRoot : GitVcsRoot({
+    id("DotNetWebAppGitRoot")
+    name = "Dotnet Framework Web App"
+    url = "https://github.com/KavyaUST198606/webapp.git"
+    branch = "refs/heads/main"
+    branchSpec = "+:refs/heads/*"
+})
+
+// Sample 1: full pipeline on main, Release, all scans on.
+object DotNetWebAppReleaseBuild : BuildType({
+    id("DotNetWebAppReleaseBuild")
+    name = "Dotnet Framework Web App - Release (Full)"
+
+    templates(DotNetFrameworkWebAppVS2019)
+
+    vcs {
+        root(DotNetWebAppGitRoot)
+    }
+
+    params {
+        param("repo.url", "https://github.com/KavyaUST198606/webapp.git")
+        param("branch.name", "refs/heads/main")
+        param("solution.path", "MyDotNetFrameworkApp.sln")
+        param("application.id", "MyDotNetFrameworkApp")
+        param("custom.owner.team", "<owning-team>")
+        param("sonar.host.url", "https://<sonarqube-host>")
+        param("msbuild.configuration", "Release")
+    }
+})
+
+// Sample 2: quick Debug build on feature branches, security scans off.
+object DotNetWebAppDebugBuild : BuildType({
+    id("DotNetWebAppDebugBuild")
+    name = "Dotnet Framework Web App - Debug (Quick)"
+
+    templates(DotNetFrameworkWebAppVS2019)
+
+    vcs {
+        root(DotNetWebAppGitRoot)
+    }
+
+    params {
+        param("repo.url", "https://github.com/KavyaUST198606/webapp.git")
+        param("branch.name", "refs/heads/feature/*")
+        param("solution.path", "MyDotNetFrameworkApp.sln")
+        param("application.id", "MyDotNetFrameworkApp")
+        param("custom.owner.team", "<owning-team>")
+        param("sonar.host.url", "https://<sonarqube-host>")
+        param("msbuild.configuration", "Debug")
+        param("enable.sonar", "false")
+        param("enable.snyk", "false")
+        param("enable.gitleaks", "false")
+    }
+})
+
+// Sample 3: main branch with SonarQube off; Snyk and GitLeaks still run.
+object DotNetWebAppSecurityScan : BuildType({
+    id("DotNetWebAppSecurityScan")
+    name = "Dotnet Framework Web App - Security Scan"
+
+    templates(DotNetFrameworkWebAppVS2019)
+
+    vcs {
+        root(DotNetWebAppGitRoot)
+    }
+
+    params {
+        param("repo.url", "https://github.com/KavyaUST198606/webapp.git")
+        param("branch.name", "refs/heads/main")
+        param("solution.path", "MyDotNetFrameworkApp.sln")
+        param("application.id", "MyDotNetFrameworkApp")
+        param("custom.owner.team", "<owning-team>")
+        param("sonar.host.url", "https://<sonarqube-host>")
+        param("enable.sonar", "false")
+    }
+})
+
 project {
+    vcsRoot(DotNetWebAppGitRoot)
     template(DotNetFrameworkWebAppVS2019)
+    buildType(DotNetWebAppReleaseBuild)
+    buildType(DotNetWebAppDebugBuild)
+    buildType(DotNetWebAppSecurityScan)
 }
